@@ -512,8 +512,9 @@ def hallucination(text: str) -> bool:
 
 def find_vad() -> Path | None:
     dest = CACHE / "models" / "ggml-silero-v5.1.2.bin"
-    if dest.exists():
-        return dest
+    for p in (dest, Path.home() / ".reelcut" / "watch" / "models" / dest.name):  # reelcut keeps the same model
+        if p.exists():
+            return p
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(".part")
