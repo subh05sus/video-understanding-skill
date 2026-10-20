@@ -1,0 +1,15 @@
+{
+  "name": "video-understanding",
+  "description": "Watch videos the way a person does: a Think-Act-Observe loop over frames, speech, sound and on-screen text.",
+  "owner": {
+    "name": "subh05sus",
+    "url": "https://github.com/subh05sus"
+  },
+  "plugins": [
+    {
+      "name": "video-understanding",
+      "source": "./",
+      "description": "Agentic video understanding: overview, search, frames at any fps, zoom, OCR, transcript, audio map, memory, clips and a watch-path report."
+    }
+  ]
+}
