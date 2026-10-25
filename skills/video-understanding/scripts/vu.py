@@ -17,6 +17,8 @@ video and lets it look, listen and read wherever it chooses, at whatever frame r
     observe    one line into the watch log: what the last look showed
     clip       cut the moment out as mp4 or gif
     report     an HTML page of the watch path: where it looked, at what fps, and the evidence
+    teardown   how the video is made, measured: cuts and camera, sound, delivery, design, type, motion
+               (runs the deep/ lenses with numpy and OpenCV; `vu setup-deep` makes their environment once)
     budget     frames looked at in this session, against the depth's cap
     fetch      download a URL (yt-dlp)
     doctor     which senses are available on this machine
@@ -354,53 +356,9 @@ class Video:
         got = self.load("transcript.json")
         if got and (got.get("model") == model or model == "small"):
             return got
-        binary = next((b for b in ("whisper-cli", "whisper-cpp", "whisper.cpp") if shutil.which(b)), None)
-        if not binary:
-            if required:
-                raise VuError("whisper.cpp is not installed (macOS: brew install whisper-cpp).")
-            return None
-        model_path = find_model(model)
-        eprint(f"vu: transcribing {self.meta['name']} with whisper {model} (language {lang}) …")
-        t0 = time.time()
-        with tempfile.TemporaryDirectory() as td:
-            wav = Path(td) / "a.wav"
-            run(["ffmpeg", "-v", "error", "-i", str(self.path), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)])
-            out = Path(td) / "out"
-            cmd = [binary, "-m", str(model_path), "-f", str(wav), "-l", lang, "-ojf", "-of", str(out), "-np",
-                   "-t", str(max(2, (os.cpu_count() or 4) - 1))]
-            vad = find_vad()
-            if vad:  # voice detection first, so music and effects are not "heard" as words
-                cmd += ["--vad", "-vm", str(vad)]
-            run(cmd)
-            raw = json.loads((Path(str(out) + ".json")).read_text(errors="replace"))
-        segments = []
-        for seg in raw.get("transcription", []):
-            words, cur = [], None
-            for tok in seg.get("tokens", []):
-                text = tok.get("text", "")
-                if text.startswith("[_") or text.startswith("<|"):
-                    continue
-                a, b = tok["offsets"]["from"] / 1000, tok["offsets"]["to"] / 1000
-                if cur is None or text.startswith(" ") or not cur["w"]:
-                    if cur and cur["w"].strip():
-                        words.append(cur)
-                    cur = {"w": text.strip(), "a": a, "b": b, "p": [tok.get("p", 1.0)]}
-                else:
-                    cur["w"] += text
-                    cur["b"] = b
-                    cur["p"].append(tok.get("p", 1.0))
-            if cur and cur["w"].strip():
-                words.append(cur)
-            words = [{"w": w["w"], "a": round(w["a"], 2), "b": round(w["b"], 2), "p": round(min(w["p"]), 2)} for w in words]
-            text = seg.get("text", "").strip()
-            if not text or hallucination(text):
-                continue
-            conf = round(statistics.mean([w["p"] for w in words]), 2) if words else 0.0
-            segments.append({"a": seg["offsets"]["from"] / 1000, "b": seg["offsets"]["to"] / 1000,
-                             "text": text, "conf": conf, "words": words})
-        data = {"model": model, "language": raw.get("result", {}).get("language"), "segments": segments,
-                "seconds": round(time.time() - t0, 1)}
-        self.save("transcript.json", data)
+        data = whisper(self.path, model, lang, required=required, name=self.meta["name"])
+        if data is not None:
+            self.save("transcript.json", data)
         return data
 
     # ── on-screen text index, built lazily for search ──
@@ -552,6 +510,58 @@ def find_model(name: str) -> Path:
                 last = time.time()
     tmp.rename(dest)
     return dest
+
+
+def whisper(path: Path, model: str = "small", lang: str = "auto", required: bool = False,
+            name: str | None = None) -> dict | None:
+    """Transcribe a file with whisper.cpp: {"model", "language", "segments": [{"a", "b", "text", "conf",
+    "words": [{"w", "a", "b", "p"}]}], "seconds"}. None when whisper.cpp is missing (unless required)."""
+    binary = next((b for b in ("whisper-cli", "whisper-cpp", "whisper.cpp") if shutil.which(b)), None)
+    if not binary:
+        if required:
+            raise VuError("whisper.cpp is not installed (macOS: brew install whisper-cpp).")
+        return None
+    model_path = find_model(model)
+    eprint(f"vu: transcribing {name or Path(path).name} with whisper {model} (language {lang}) …")
+    t0 = time.time()
+    with tempfile.TemporaryDirectory() as td:
+        wav = Path(td) / "a.wav"
+        run(["ffmpeg", "-v", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)])
+        out = Path(td) / "out"
+        cmd = [binary, "-m", str(model_path), "-f", str(wav), "-l", lang, "-ojf", "-of", str(out), "-np",
+               "-t", str(max(2, (os.cpu_count() or 4) - 1))]
+        vad = find_vad()
+        if vad:  # voice detection first, so music and effects are not "heard" as words
+            cmd += ["--vad", "-vm", str(vad)]
+        run(cmd)
+        raw = json.loads((Path(str(out) + ".json")).read_text(errors="replace"))
+    segments = []
+    for seg in raw.get("transcription", []):
+        words, cur = [], None
+        for tok in seg.get("tokens", []):
+            text = tok.get("text", "")
+            if text.startswith("[_") or text.startswith("<|"):
+                continue
+            a, b = tok["offsets"]["from"] / 1000, tok["offsets"]["to"] / 1000
+            if cur is None or text.startswith(" ") or not cur["w"]:
+                if cur and cur["w"].strip():
+                    words.append(cur)
+                cur = {"w": text.strip(), "a": a, "b": b, "p": [tok.get("p", 1.0)]}
+            else:
+                cur["w"] += text
+                cur["b"] = b
+                cur["p"].append(tok.get("p", 1.0))
+        if cur and cur["w"].strip():
+            words.append(cur)
+        words = [{"w": w["w"], "a": round(w["a"], 2), "b": round(w["b"], 2), "p": round(min(w["p"]), 2)} for w in words]
+        text = seg.get("text", "").strip()
+        if not text or hallucination(text):
+            continue
+        conf = round(statistics.mean([w["p"] for w in words]), 2) if words else 0.0
+        segments.append({"a": seg["offsets"]["from"] / 1000, "b": seg["offsets"]["to"] / 1000,
+                         "text": text, "conf": conf, "words": words})
+    return {"model": model, "language": raw.get("result", {}).get("language"), "segments": segments,
+            "seconds": round(time.time() - t0, 1)}
 
 
 def resolve(src: str) -> Video:
@@ -756,6 +766,8 @@ def vision_helper() -> Path | None:
         return None
     out = CACHE / "bin" / "vu-vision"
     src = HERE / "vision.swift"
+    if not src.exists():   # a packaged copy may ship the helper built, with no source
+        return HERE / "vu-vision" if (HERE / "vu-vision").exists() else None
     if out.exists() and out.stat().st_mtime >= src.stat().st_mtime:
         return out
     if not shutil.which("swiftc"):
@@ -1364,6 +1376,62 @@ def cmd_doctor(args) -> None:
     vh = vision_helper() if sys.platform == "darwin" else None
     row("text (Vision)", bool(vh), str(vh) if vh else ("needs swiftc: xcode-select --install" if sys.platform == "darwin" else "macOS only"))
     row("text (tesseract)", bool(shutil.which("tesseract")), shutil.which("tesseract") or "optional fallback")
+    py = deep_python()
+    row("teardown", bool(py), py or "deep teardown mode needs numpy + OpenCV + Pillow: run `vu setup-deep` once")
+
+
+# ─── deep teardown (numpy, OpenCV, Pillow in their own environment) ──────────────────────────────
+
+DEEP_VENV = CACHE / "venv"
+DEEP_PKGS = ["numpy", "opencv-python-headless", "pillow"]
+
+
+def _has_deep(py: str) -> bool:
+    p = subprocess.run([py, "-c", "import numpy, cv2, PIL"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return p.returncode == 0
+
+
+def deep_python() -> str | None:
+    """A Python that can run the teardown lenses: $VU_DEEP_PY, vu's own venv, motionmaxxing's, or this one."""
+    for cand in (os.environ.get("VU_DEEP_PY"), str(DEEP_VENV / "bin" / "python"),
+                 str(Path(os.environ.get("MM_HOME", Path.home() / ".motionmaxxing")) / "venv" / "bin" / "python"), sys.executable):
+        if cand and Path(cand).exists() and _has_deep(cand):
+            return cand
+    return None
+
+
+def cmd_setup_deep(args) -> None:
+    """Make vu's venv for the teardown lenses with a Python 3.10-3.13 (wheels exist for those)."""
+    base = next((p for p in (shutil.which(f"python3.{v}") for v in (12, 13, 11, 10)) if p), None)
+    if not base:
+        raise VuError("no Python 3.10-3.13 found for the teardown venv (macOS: brew install python@3.12)")
+    if not (DEEP_VENV / "bin" / "python").exists():
+        eprint(f"vu: making {DEEP_VENV} with {base} …")
+        run([base, "-m", "venv", str(DEEP_VENV)])
+    eprint("vu: installing " + ", ".join(DEEP_PKGS) + " …")
+    p = subprocess.run([str(DEEP_VENV / "bin" / "pip"), "install", "-q", *DEEP_PKGS])
+    if p.returncode != 0:
+        raise VuError("pip install failed; see the messages above")
+    print(f"teardown ready: {DEEP_VENV / 'bin' / 'python'}")
+
+
+def cmd_teardown(args) -> None:
+    py = deep_python()
+    if not py:
+        raise VuError("the teardown needs numpy, OpenCV and Pillow: run `vu setup-deep` once (or set VU_DEEP_PY)")
+    v = resolve(args.src)
+    cmd = [py, str(HERE / "deep" / "teardown.py"), str(v.path)]
+    if args.lens:
+        cmd += ["--lens", args.lens]
+    if args.full:
+        cmd.append("--full")
+    if args.fresh:
+        cmd.append("--fresh")
+    if args.only_report:
+        cmd.append("--only-report")
+    p = subprocess.run(cmd)
+    if p.returncode:
+        raise VuError(f"teardown stopped (exit {p.returncode})")
 
 
 def cmd_cache(args) -> None:
@@ -1641,6 +1709,13 @@ def main(argv=None) -> int:
 
     sp = add("budget", cmd_budget, "frames used in this session; --depth to change it")
     sp.add_argument("--depth", choices=DEPTHS)
+
+    sp = add("teardown", cmd_teardown, "measure how the video is made: edit, sound, delivery, design, type, motion")
+    sp.add_argument("--lens", help="only these lenses, comma-separated (delivery,sound,edit,design,typography,motion)")
+    sp.add_argument("--full", action="store_true", help="look closely at every second, even of a long video")
+    sp.add_argument("--fresh", action="store_true", help="measure again instead of using cached lens results")
+    sp.add_argument("--only-report", action="store_true", help="rebuild style.json, teardown.md and the page from cached lenses")
+    add("setup-deep", cmd_setup_deep, "make the Python environment the teardown needs (once)", src=False)
 
     sp = add("fetch", cmd_fetch, "download URLs with yt-dlp", src=False)
     sp.add_argument("url", nargs="+")

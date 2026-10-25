@@ -62,3 +62,18 @@ A look over the budget exits with code 3 and a message. Narrow it, or pass `--ov
 | `doctor` | Lists which senses are available, and the install line for each missing one. |
 | `fetch <url> […]` | Downloads with yt-dlp (≤1080p, mp4) into the cache. Other commands call it themselves when given a URL. |
 | `cache [--clear <id>]` | The cached videos with their notes, or clears one. |
+
+## Teardown (how it is made)
+
+| command | what |
+|---|---|
+| `teardown <v>` | all six lenses: delivery, sound, edit, design, typography, motion; prints findings and the paths of `teardown.md`, `teardown.html`, `style.json` |
+| `teardown <v> --lens edit,motion` | only these lenses (the others come from the cache) |
+| `teardown <v> --full` | a long video: measure every second (default: hook, ending, busiest and a typical 30 s) |
+| `teardown <v> --fresh` | measure again, ignoring cached lens results |
+| `teardown <v> --jobs N` | how many processes the lenses run in (default half the cores; `1` = one at a time) |
+| `teardown <v> --only-report --analysis a.md` | rebuild the page with your analysis on top, no measuring |
+| `setup-deep` | once per machine: the Python environment the lenses need (numpy, OpenCV, Pillow) |
+
+Each lens writes `<cache>/videos/<id>/teardown/<lens>.json` with a `summary` (plain lines), its measurements and
+`evidence` images under `teardown/img/`. See [teardown.md](teardown.md) for how to read and use them.

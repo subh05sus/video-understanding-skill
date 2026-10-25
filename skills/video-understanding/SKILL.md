@@ -1,6 +1,6 @@
 ---
 name: video-understanding
-description: Watch and understand a video the way a person does, in a Think-Act-Observe loop. Get a map first, jump to the parts that matter, pull frames on demand, re-watch fast parts at a higher fps, zoom in to read, listen to the transcript and the sound, and skip what doesn't matter. Answers come with timestamped evidence. Use it whenever a video file or video URL (YouTube, Instagram, TikTok, X, Loom, a screen recording, a render) is involved and someone wants to know what is in it. That covers "watch this", "what happens in", "when does", "find the moment", "summarize / chapter this video", "critique this reel/hook", "turn this tutorial into steps", "compare these videos", "is there a mistake in this render", or /watch, even when they don't say "video understanding".
+description: Watch and understand a video the way a person does, in a Think-Act-Observe loop. Get a map first, jump to the parts that matter, pull frames on demand, re-watch fast parts at a higher fps, zoom in to read, listen to the transcript and the sound, and skip what doesn't matter. Answers come with timestamped evidence. Use it whenever a video file or video URL (YouTube, Instagram, TikTok, X, Loom, a screen recording, a render) is involved and someone wants to know what is in it. That covers "watch this", "what happens in", "when does", "find the moment", "summarize / chapter this video", "critique this reel/hook", "turn this tutorial into steps", "compare these videos", "is there a mistake in this render", or /watch, even when they don't say "video understanding". Also for how a video is made, measured: a deep teardown of its editing (cuts, transitions, camera), motion (every element's entrance with its fitted GSAP ease and duration), typography (caption style and font), design (palette, grade, layout), delivery (pace, pauses, stressed words, gestures) and sound (music, effects), with a style.json and GSAP to recreate it: "break down this reel", "how is this edited", "what font/colours/easing", "make mine like this", "teardown".
 ---
 
 # Video understanding
@@ -99,6 +99,16 @@ and whenever someone asks how you reached the answer.
 
 **Never claim what you didn't see or hear.** If the answer is "it isn't in the video", say where you
 looked and that you checked the transcript and on-screen text.
+
+## Deep teardown: how it is made
+
+When the question is about craft (editing, animation, type, design, delivery, sound) or about copying a style,
+measure it instead of eyeballing it: `$VU teardown <video>` runs six lenses that measure cuts and transitions
+at the video's own frame rate, fit GSAP eases to every element's entrance and check them by re-rendering,
+match the caption font by rendering candidates, extract the palette and grade, track pitch and pauses, and
+judge the music bed and sound effects. It writes `teardown.md` (read it), a page, and a `style.json`.
+Then do the part code can't: look at the evidence and write the analysis. Follow
+[references/teardown.md](references/teardown.md).
 
 ## Recipes
 
