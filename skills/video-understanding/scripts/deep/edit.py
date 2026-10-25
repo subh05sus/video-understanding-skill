@@ -51,13 +51,37 @@ def _hist(f: np.ndarray) -> np.ndarray:
     return h / max(1.0, h.sum())
 
 
+MATCH_EDGE = 360      # long edge of the grey frames kept for feature matching
+
+
+def ffmpeg_small(shape) -> tuple[int, int]:
+    """(w, h) of the 160 px working frame for a frame of this shape."""
+    h, w = shape[:2]
+    return (WORK, max(2, round(h * WORK / w))) if w >= h else (max(2, round(w * WORK / h)), WORK)
+
+
+def gray_at(ctx: Ctx, t: float) -> np.ndarray:
+    """The grey frame showing at t, from the copy kept while reading (or one seek for a long video)."""
+    g = getattr(ctx, "_g360", None)
+    if g:
+        return g[min(len(g) - 1, max(0, int(t * ctx.fps + 1e-6)))]
+    return cv2.cvtColor(ctx.frame(t, long_edge=MATCH_EDGE), cv2.COLOR_RGB2GRAY)
+
+
 def signals(ctx: Ctx) -> dict:
     """Walk the whole video once at its own fps: times, grey difference d[i] and histogram distance dh[i] between
     frame i-1 and i (d[0] = 0), each frame's mean luma and contrast, and a small grey thumbnail of every frame."""
     tw, th = THUMB if ctx.portrait else THUMB[::-1]
     ts, d, dh, luma, std, thumbs, hists = [], [], [], [], [], [], []
     prev_g = prev_h = None
-    for t, f in ctx.frames(0, ctx.duration, long_edge=WORK):
+    # keep a 360 px grey copy of every frame of a short video: the cut checks look at many single frames, and
+    # seeking into a long-GOP 1080p file for each one costs seconds apiece
+    keep = ctx.duration * ctx.fps <= 6000
+    ctx._g360 = [] if keep else None
+    for t, big in ctx.frames(0, ctx.duration, long_edge=MATCH_EDGE):
+        if keep:
+            ctx._g360.append(cv2.cvtColor(big, cv2.COLOR_RGB2GRAY))
+        f = cv2.resize(big, ffmpeg_small(big.shape), interpolation=cv2.INTER_AREA)
         g = cv2.cvtColor(f, cv2.COLOR_RGB2GRAY).astype(np.float32)
         h = _hist(f)
         ts.append(t)
@@ -235,7 +259,7 @@ def _zoom_transition(ctx: Ctx, t_pre: float, t_post: float, n: int) -> dict | No
     always match well, while the two ends may share only a small face), and the curve is fitted to an ease."""
     fps = ctx.fps
     times = [t_pre + k / fps for k in range(n)]
-    frames = [ctx.frame(t + 0.2 / fps, long_edge=480) for t in times]
+    frames = [gray_at(ctx, t + 0.2 / fps) for t in times]
     logs = []
     for f0, f1 in zip(frames, frames[1:]):
         m = _orb_match(f0, f1)
@@ -388,7 +412,8 @@ def classify_transition(s: dict, a: int, b: int, ctx: Ctx) -> dict:
 
 def _orb_match(f1: np.ndarray, f2: np.ndarray) -> dict | None:
     """Similarity transform from frame 1 to frame 2 (scale, shift as a fraction of the width) and how well it fits."""
-    g1, g2 = cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY), cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY)
+    g1 = f1 if f1.ndim == 2 else cv2.cvtColor(f1, cv2.COLOR_RGB2GRAY)
+    g2 = f2 if f2.ndim == 2 else cv2.cvtColor(f2, cv2.COLOR_RGB2GRAY)
     orb = cv2.ORB_create(1500)
     k1, d1 = orb.detectAndCompute(g1, None)
     k2, d2 = orb.detectAndCompute(g2, None)
@@ -456,8 +481,8 @@ def classify_instant(s: dict, i: int, ctx: Ctx, pre: int | None = None) -> dict:
     part = _partial(s, i)
     if part:
         return out | {"kind": "insert", **part, "cut": False, "conf": 0.7}
-    f1 = ctx.frame(float(s["t"][pre]) + 0.2 / ctx.fps, long_edge=480)
-    f2 = ctx.frame(t + 0.2 / ctx.fps, long_edge=480)
+    f1 = gray_at(ctx, float(s["t"][pre]) + 0.2 / ctx.fps)
+    f2 = gray_at(ctx, t + 0.2 / ctx.fps)
     m = _orb_match(f1, f2)
     if m and m.get("inliers", 0) >= 25 and m.get("ratio", 0) >= 0.35:
         sc, shift = m["scale"], math.hypot(m["dx"], m["dy"])
@@ -564,8 +589,8 @@ def find_cuts(ctx: Ctx, s: dict) -> tuple[list[dict], list[dict]]:
     for _, i in sorted(quiet, reverse=True)[:30]:
         if any(abs(s["t"][i] - t) < 0.2 for t in have):
             continue
-        f1 = ctx.frame(float(s["t"][i - 1]) + 0.2 / ctx.fps, long_edge=360)
-        f2 = ctx.frame(float(s["t"][i]) + 0.2 / ctx.fps, long_edge=360)
+        f1 = gray_at(ctx, float(s["t"][i - 1]) + 0.2 / ctx.fps)
+        f2 = gray_at(ctx, float(s["t"][i]) + 0.2 / ctx.fps)
         m = _orb_match(f1, f2)
         if not m or m.get("inliers", 0) < 40 or m.get("ratio", 0) < 0.5:
             continue
@@ -693,8 +718,8 @@ def camera(ctx: Ctx, shot: dict, person: np.ndarray | None = None, digital: bool
     total_s = float(np.exp(logS[-1]))
     steady_s = (np.sign(np.log(sc)) == np.sign(logS[-1]))[np.abs(np.log(sc)) > 1e-4].mean() if (np.abs(np.log(sc)) > 1e-4).any() else 0
     if abs(total_s - 1) > 0.05 and steady_s > 0.75:
-        f0 = ctx.frame(ts[0], long_edge=480)
-        f1 = ctx.frame(ts[-1], long_edge=480)
+        f0 = gray_at(ctx, ts[0])
+        f1 = gray_at(ctx, ts[-1])
         check = _orb_match(f0, f1)
         if check and check.get("inliers", 0) >= 25 and abs(check["scale"] - total_s) < 0.04:
             fit = ease.fit(np.array([ts[0]] + [ts[i + 1] for i, st in enumerate(steps) if st is not None]),
