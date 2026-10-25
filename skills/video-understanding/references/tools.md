@@ -12,7 +12,7 @@ look produced (`looks/`). The id comes from the file's content, so a renamed or 
 
 | command | does |
 |---|---|
-| `overview <v> [<v2> …] [--question "…"] [--depth quick\|normal\|deep] [--rows 30] [--no-transcript] [--no-storyboard] [--model small] [--lang auto]` | Measures cuts, motion and loudness and transcribes, all once and cached. Prints the metadata, the timeline, the fast/still parts, sound hits and notes, and writes a storyboard grid. `--question` or `--depth` starts a new session, which resets the budget and the log. |
+| `overview <v> [<v2> …] [--question "…"] [--depth quick\|normal\|deep\|max] [--rows 30] [--no-transcript] [--no-storyboard] [--model small] [--lang auto]` | Measures cuts, motion and loudness and transcribes, all once and cached. Prints the metadata, the timeline, the fast/still parts, sound hits and notes, and writes a storyboard grid. `--question` or `--depth` starts a new session, which resets the budget and the log. |
 | `scenes <v> [--from --to]` | The shot list with lengths: median, shortest and longest shot. |
 | `motion <v> [--from --to]` | A motion sparkline (0.5 s bins, each comparing frames 0.25 s apart), the cuts, the fast spans (re-watch these at 8–12 fps) and the still spans (one frame is enough). |
 | `audio <v> [--from --to]` | A loudness sparkline (LUFS), the speech spans, the sound-without-speech spans (music, effects), the silences, and the hits (sudden loud). |
@@ -69,7 +69,7 @@ A look over the budget exits with code 3 and a message. Narrow it, or pass `--ov
 |---|---|
 | `teardown <v>` | all six lenses: delivery, sound, edit, design, typography, motion; prints findings and the paths of `teardown.md`, `teardown.html`, `style.json` |
 | `teardown <v> --lens edit,motion` | only these lenses (the others come from the cache) |
-| `teardown <v> --full` | a long video: measure every second (default: hook, ending, busiest and a typical 30 s) |
+| `teardown <v> --level max` (or `--full`) | a long video: measure every second (default `deep`: hook, ending, busiest and a typical 30 s); several videos at once are fine |
 | `teardown <v> --fresh` | measure again, ignoring cached lens results |
 | `teardown <v> --jobs N` | how many processes the lenses run in (default half the cores; `1` = one at a time) |
 | `teardown <v> --only-report --analysis a.md` | rebuild the page with your analysis on top, no measuring |

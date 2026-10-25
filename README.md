@@ -70,7 +70,18 @@ Just ask, and the skill triggers on any video file or URL:
 >
 > turn this screen recording into step-by-step notes with the exact commands
 
-Or use the command: `/watch <file|url> [question]`. With no question it gives a summary with chapters.
+Or use the command: `/watch <file|url> [question] [--level quick|normal|deep|max]`. With no question it gives
+a summary with chapters.
+
+**Effort levels** (default `normal`; Claude asks only when your request leaves it unclear, and one level
+covers every video in the request):
+
+| level | what runs | rough time, 1-min reel |
+|---|---|---|
+| `quick` | a map and a glance (up to 40 frames) | seconds |
+| `normal` | the watch loop (up to 150 frames) | under a minute |
+| `deep` | the watch loop + the teardown of the key parts | a few minutes |
+| `max` | the watch loop + the teardown of every second | longest |
 
 Recipes built in: **summary + chapters**, **reel / hook critique**, **find the moment**, **video → steps**,
 and **compare videos**. See [`references/recipes.md`](skills/video-understanding/references/recipes.md).

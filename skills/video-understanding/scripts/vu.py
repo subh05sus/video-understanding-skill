@@ -59,7 +59,11 @@ DEPTHS = {
     "quick": {"budget": 40, "story": 9, "ocr_every": 20.0},
     "normal": {"budget": 150, "story": 16, "ocr_every": 10.0},
     "deep": {"budget": 500, "story": 25, "ocr_every": 5.0},
+    "max": {"budget": 1500, "story": 36, "ocr_every": 2.0},
 }
+# The effort ladder people choose from: deep adds the teardown of the key parts, max the full teardown.
+LEVELS = {"quick": "a glance", "normal": "the watch loop (default)", "deep": "watch + teardown of the key parts",
+          "max": "watch + full teardown of every second"}
 CUT_SCORE = 0.3          # a cut has to change the picture a lot
 CUT_MERGE = 0.25         # two cuts closer than this are one
 MOTION_FPS = 4           # motion compares frames a quarter-second apart
@@ -1419,19 +1423,24 @@ def cmd_teardown(args) -> None:
     py = deep_python()
     if not py:
         raise VuError("the teardown needs numpy, OpenCV and Pillow: run `vu setup-deep` once (or set VU_DEEP_PY)")
-    v = resolve(args.src)
-    cmd = [py, str(HERE / "deep" / "teardown.py"), str(v.path)]
-    if args.lens:
-        cmd += ["--lens", args.lens]
-    if args.full:
-        cmd.append("--full")
-    if args.fresh:
-        cmd.append("--fresh")
-    if args.only_report:
-        cmd.append("--only-report")
-    p = subprocess.run(cmd)
-    if p.returncode:
-        raise VuError(f"teardown stopped (exit {p.returncode})")
+    for i, src in enumerate(args.src):
+        if i:
+            print("\n" + "═" * 100 + "\n")
+        v = resolve(src)
+        cmd = [py, str(HERE / "deep" / "teardown.py"), str(v.path)]
+        if args.lens:
+            cmd += ["--lens", args.lens]
+        if args.full or args.level == "max":
+            cmd.append("--full")
+        if args.fresh:
+            cmd.append("--fresh")
+        if args.only_report:
+            cmd.append("--only-report")
+        if args.jobs:
+            cmd += ["--jobs", str(args.jobs)]
+        p = subprocess.run(cmd)
+        if p.returncode:
+            raise VuError(f"teardown of {v.meta['name']} stopped (exit {p.returncode})")
 
 
 def cmd_cache(args) -> None:
@@ -1710,7 +1719,9 @@ def main(argv=None) -> int:
     sp = add("budget", cmd_budget, "frames used in this session; --depth to change it")
     sp.add_argument("--depth", choices=DEPTHS)
 
-    sp = add("teardown", cmd_teardown, "measure how the video is made: edit, sound, delivery, design, type, motion")
+    sp = add("teardown", cmd_teardown, "measure how the video is made: edit, sound, delivery, design, type, motion", many=True)
+    sp.add_argument("--level", choices=["deep", "max"], default="deep", help="deep: key parts of a long video; max: every second")
+    sp.add_argument("--jobs", type=int, help="processes for the lenses (default half the cores)")
     sp.add_argument("--lens", help="only these lenses, comma-separated (delivery,sound,edit,design,typography,motion)")
     sp.add_argument("--full", action="store_true", help="look closely at every second, even of a long video")
     sp.add_argument("--fresh", action="store_true", help="measure again instead of using cached lens results")

@@ -14,7 +14,7 @@ part, done by looking at the evidence it hands you.
 ```bash
 $VU teardown <video|url>                 # all six lenses, in parallel processes; cached after
 $VU teardown <video> --lens motion       # one lens again (delivery, sound, edit, design, typography, motion)
-$VU teardown <video> --full              # a long video: every second instead of hook, ending, busiest, typical
+$VU teardown <video> --level max         # a long video: every second instead of hook, ending, busiest, typical
 ```
 
 First time on a machine: `$VU setup-deep` (makes a small Python environment with numpy, OpenCV, Pillow).

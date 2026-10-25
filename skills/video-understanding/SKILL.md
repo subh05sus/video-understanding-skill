@@ -25,15 +25,27 @@ Run `$VU doctor` once if something is missing, and tell the person the one-line 
 
 **0. Frame the question.** Before any look, write down in one line what would answer it and what kind of
 evidence that is: something *said* (transcript), *shown* (frames, zoom), *written on screen* (ocr), a
-*moment* (motion, cuts, sound hits), or a *pattern* across the whole video. Pick a depth:
+*moment* (motion, cuts, sound hits), or a *pattern* across the whole video.
 
-| depth | for | frame budget |
-|---|---|---|
-| `quick` | "what is this video", "is it about X" | 40 |
-| `normal` | most questions, find-the-moment, summaries | 150 |
-| `deep` | "every mistake", step-by-step extraction, frame-exact QA, comparisons | 500 |
+**Effort level.** One ladder, chosen by the person. The default is `normal`:
 
-**1. Map.** `$VU overview <video|url> --question "…" --depth normal`. You get metadata, a timeline of
+| level | what runs | for | rough time, 1-min reel |
+|---|---|---|---|
+| `quick` | overview + up to 40 frames | "what is this", "is it about X" | seconds |
+| `normal` (default) | the watch loop, up to 150 frames | most questions, find-the-moment, summaries, hook critique | under a minute |
+| `deep` | the watch loop (500 frames) + `vu teardown` (key parts of a long video) | how it is made, style, "make mine like this", step-by-step, frame-exact QA | a few minutes |
+| `max` | the watch loop (1500 frames) + `vu teardown --level max` (every second) | exhaustive teardowns of long videos, "every mistake" | longest |
+
+- Use the level they asked for: words ("quick look", "glance", "deep dive", "break it down fully",
+  "everything") or a flag (`/watch … --level deep`). A teardown request is at least `deep`.
+- **Ask only when it is unclear**: the request could reasonably be a glance or a full breakdown, and
+  getting it wrong would waste their time (a long video, several videos, "analyse this" with no question).
+  Then ask once, with the question box (AskUserQuestion), offering the four levels with their time and the
+  recommended one first. Otherwise don't ask; use `normal`.
+- Several videos: one level for all of them, chosen once.
+- Pass it on: `--depth <level>` for `overview` and `budget`, `vu teardown` for `deep`, `vu teardown --level max` for `max`.
+
+**1. Map.** `$VU overview <video|url> --question "…" --depth <level>`. You get metadata, a timeline of
 segments (motion sparkline, cuts, speech/music, what is said), the fast and still parts, sound hits, notes
 from earlier sessions, and a **storyboard** grid. **Read the storyboard image** (Read tool). With several
 videos, pass them all: `$VU overview a.mp4 b.mp4 c.mp4`.
